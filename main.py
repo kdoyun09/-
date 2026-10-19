@@ -15,7 +15,7 @@ st.caption(
 
 @st.cache_data
 def load_data():
-    # 1. GeoJSON 로드
+    # 1. GeoJSON 로드 (로컬 우선, 없을 경우 URL fallback)
     geojson_data = None
     try:
         with open("sigungu_kr.geojson.txt", "r", encoding="utf-8") as f:
@@ -26,12 +26,11 @@ def load_data():
         res.raise_for_status()
         geojson_data = res.json()
 
-    # GeoJSON 내부 속성 코드 정리 (문자열 변환 및 앞 5자리 보장)
+    # GeoJSON 내부 속성 코드 가공 (5자리 정제)
     code_to_info = {}
     for feat in geojson_data.get("features", []):
         props = feat.get("properties", {})
         raw_code = str(props.get("코드", "")).strip()
-        # 소수점 제거 및 앞 5자리 문자열로 가공
         clean_code = raw_code.split(".")[0].zfill(5)[:5]
         props["코드"] = clean_code
 
@@ -63,15 +62,15 @@ def load_data():
         elif "100" in str(c):
             senior_cols.append(c)
 
-    # 6. 숫자형 변환
+    # 6. 숫자형 변환 및 결측치 0 처리
     for c in total_cols:
         df_2026[c] = pd.to_numeric(df_2026[c], errors="coerce").fillna(0)
 
-    # 7. 합계 구하기
+    # 7. 합계 계산
     df_2026["전체인구"] = df_2026[total_cols].sum(axis=1)
     df_2026["고령인구"] = df_2026[senior_cols].sum(axis=1)
 
-    # 8. 시군구 그룹화 및 비율 계산
+    # 8. 시군구 그룹화 및 고령화율(%) 계산
     grouped = (
         df_2026.groupby("sigungu_code")[["전체인구", "고령인구"]]
         .sum()
@@ -96,22 +95,39 @@ try:
     with st.spinner("데이터를 처리하는 중입니다..."):
         geojson_data, df_map = load_data()
 
-    # 9. Plotly 시각화
-    fig = px.choropleth_mapbox(
-        df_map,
-        geojson=geojson_data,
-        locations="sigungu_code",
-        featureidkey="properties.코드",
-        color="고령화율",
-        color_continuous_scale="Reds",
-        range_color=(df_map["고령화율"].min(), df_map["고령화율"].max()),
-        mapbox_style="white-bg",
-        center={"lat": 35.9, "lon": 127.8},
-        zoom=6,
-        hover_name="시군구명",
-        hover_data={"sigungu_code": False, "고령화율": ":.2f%"},
-        labels={"고령화율": "고령화율(%)"},
-    )
+    # 9. Plotly 버전(5.x vs 6.x 이상) 자동 감지 시각화
+    if hasattr(px, "choropleth_map"):
+        fig = px.choropleth_map(
+            df_map,
+            geojson=geojson_data,
+            locations="sigungu_code",
+            featureidkey="properties.코드",
+            color="고령화율",
+            color_continuous_scale="Reds",
+            range_color=(df_map["고령화율"].min(), df_map["고령화율"].max()),
+            map_style="white-bg",
+            center={"lat": 35.9, "lon": 127.8},
+            zoom=6,
+            hover_name="시군구명",
+            hover_data={"sigungu_code": False, "고령화율": ":.2f%"},
+            labels={"고령화율": "고령화율(%)"},
+        )
+    else:
+        fig = px.choropleth_mapbox(
+            df_map,
+            geojson=geojson_data,
+            locations="sigungu_code",
+            featureidkey="properties.코드",
+            color="고령화율",
+            color_continuous_scale="Reds",
+            range_color=(df_map["고령화율"].min(), df_map["고령화율"].max()),
+            mapbox_style="white-bg",
+            center={"lat": 35.9, "lon": 127.8},
+            zoom=6,
+            hover_name="시군구명",
+            hover_data={"sigungu_code": False, "고령화율": ":.2f%"},
+            labels={"고령화율": "고령화율(%)"},
+        )
 
     fig.update_layout(
         margin={"r": 0, "t": 30, "l": 0, "b": 0},
@@ -121,7 +137,7 @@ try:
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # 주요 데이터 카드
+    # 통계 카드
     col1, col2, col3 = st.columns(3)
     max_idx = df_map["고령화율"].idxmax()
     min_idx = df_map["고령화율"].idxmin()
