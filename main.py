@@ -93,4 +93,43 @@ with st.spinner("데이터를 처리 중입니다..."):
     geojson_data, df_map = load_data()
 
 # 9. Plotly 단계구분도 지도 생성
-fig = px.
+fig = px.choropleth_mapbox(
+    df_map,
+    geojson=geojson_data,
+    locations="sigungu_code",
+    featureidkey="properties.코드",
+    color="고령화율",
+    color_continuous_scale="Reds",
+    range_color=(0, df_map["고령화율"].max()),
+    mapbox_style="white-bg",
+    center={"lat": 35.9, "lon": 127.8},
+    zoom=6,
+    hover_name="시군구명",
+    hover_data={"sigungu_code": False, "고령화율": ":.2f%"},
+    labels={"고령화율": "고령화율(%)"},
+)
+
+fig.update_layout(
+    margin={"r": 0, "t": 30, "l": 0, "b": 0},
+    height=720,
+    title_text="전국 시군구별 65세 이상 고령화율 (%)",
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# 통계 출력
+col1, col2, col3 = st.columns(3)
+max_idx = df_map["고령화율"].idxmax()
+min_idx = df_map["고령화율"].idxmin()
+
+col1.metric(
+    "최고 고령화율 지역",
+    f"{df_map.loc[max_idx, '시군구명']}",
+    f"{df_map.loc[max_idx, '고령화율']}%",
+)
+col2.metric(
+    "최저 고령화율 지역",
+    f"{df_map.loc[min_idx, '시군구명']}",
+    f"{df_map.loc[min_idx, '고령화율']}%",
+)
+col3.metric("시군구 평균 고령화율", f"{df_map['고령화율'].mean():.2f}%")
