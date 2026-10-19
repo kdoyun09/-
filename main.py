@@ -17,18 +17,19 @@ st.caption(
 @st.cache_data
 def load_data():
     # 1. 시군구 GeoJSON 불러오기
-    # 방법 A: 프로젝트 내 로컬 파일 읽기 (권장)
+    # 우선순위 1: 리포지토리 내 로컬 파일 직접 읽기
     try:
         with open("sigungu_kr.geojson.txt", "r", encoding="utf-8") as f:
             geojson_data = json.load(f)
-    # 방법 B: 로컬 파일이 없을 경우 GitHub Raw URL에서 직접 가져오기 (fallback)
+    # 우선순위 2: 로컬 파일이 없을 경우 정확한 Raw URL에서 다운로드
     except FileNotFoundError:
         geojson_url = "https://raw.githubusercontent.com/kdoyun09/-/main/sigungu_kr.geojson.txt"
         res = requests.get(geojson_url)
+        res.raise_for_status()
         geojson_data = res.json()
 
-    # 2. 인구 CSV (ZIP) 불러오기
-    csv_url = "https://raw.githubusercontent.com/first2022-cyber/contents//main/population_ts_yearly_gender.zip"
+    # 2. 인구 CSV (ZIP) 불러오기 (슬래시 오타 수정된 URL)
+    csv_url = "https://raw.githubusercontent.com/first2022-cyber/contents/main/population_ts_yearly_gender.zip"
     df = pd.read_csv(csv_url)
 
     # 3. 2026년 데이터만 필터링
@@ -39,10 +40,8 @@ def load_data():
     df_2026["sigungu_code"] = df_2026["코드"].str[:5]
 
     # 5. 전체 인구 열 및 65세 이상 인구 열 추출
-    # '계_'로 시작하는 모든 열 (남_, 여_ 제외)
     total_cols = [c for c in df_2026.columns if c.startswith("계_")]
 
-    # '계_65세' ~ '계_100세 이상' 열 추출
     senior_cols = []
     for c in total_cols:
         match = re.search(r"\d+", c)
@@ -53,11 +52,11 @@ def load_data():
         elif "100세 이상" in c:
             senior_cols.append(c)
 
-    # 6. 각 행별 전체 인구 및 고령 인구 합계 계산
+    # 6. 인구 합계 계산
     df_2026["전체인구"] = df_2026[total_cols].sum(axis=1)
     df_2026["고령인구"] = df_2026[senior_cols].sum(axis=1)
 
-    # 7. 시군구별 그룹화 및 고령화율 계산
+    # 7. 시군구별 집계 및 고령화율 계산
     grouped = (
         df_2026.groupby("sigungu_code")[["전체인구", "고령인구"]]
         .sum()
@@ -66,7 +65,7 @@ def load_data():
     grouped["고령화율"] = (grouped["고령인구"] / grouped["전체인구"]) * 100
     grouped["고령화율"] = grouped["고령화율"].round(2)
 
-    # GeoJSON의 '시군구' 및 '시도' 이름을 코드와 매핑
+    # GeoJSON의 시군구 이름 매핑
     code_to_info = {}
     for feat in geojson_data["features"]:
         props = feat["properties"]
@@ -82,7 +81,7 @@ def load_data():
 with st.spinner("데이터를 로드 중입니다..."):
     geojson_data, df_map = load_data()
 
-# 8. Plotly 단계구분도(Choropleth Mapbox) 생성
+# 8. Plotly 지도 생성
 fig = px.choropleth_mapbox(
     df_map,
     geojson=geojson_data,
@@ -105,11 +104,17 @@ fig.update_layout(
     title_text="전국 시군구별 65세 이상 고령화율 (%)",
 )
 
-# 스트림릿에 화면 출력
 st.plotly_chart(fig, use_container_width=True)
 
-# 주요 핵심 통계 카드
 col1, col2, col3 = st.columns(3)
 col1.metric(
     "최고 고령화율 지역",
-    f
+    f"{df_map.loc[df_map['고령화율'].idxmax(), '시군구명']}",
+    f"{df_map['고령화율'].max()}%",
+)
+col2.metric(
+    "최저 고령화율 지역",
+    f"{df_map.loc[df_map['고령화율'].idxmin(), '시군구명']}",
+    f"{df_map['고령화율'].min()}%",
+)
+col3.metric("시군구 평균 고령화율", f"{df_map['고령화율'].mean():.2f}%")
