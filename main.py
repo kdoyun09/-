@@ -40,7 +40,7 @@ def load_data():
     )
     df_2026["sigungu_code"] = df_2026["코드"].str[:5]
 
-    # 5. 전체 인구 열('계_') 및 65세 이상 고령 인구 열 추출 (남_, 여_ 제외)
+    # 5. 전체 인구 열('계_') 및 65세 이상 고령 인구 열 추출
     total_cols = [c for c in df_2026.columns if str(c).startswith("계_")]
 
     senior_cols = []
@@ -74,7 +74,7 @@ def load_data():
     ) * 100
     grouped["고령화율"] = grouped["고령화율"].round(2)
 
-    # GeoJSON 속성(시도, 시군구) 이름 매핑
+    # GeoJSON 속성 매핑
     code_to_info = {}
     for feat in geojson_data.get("features", []):
         props = feat.get("properties", {})
@@ -92,14 +92,5 @@ def load_data():
 with st.spinner("데이터를 처리 중입니다..."):
     geojson_data, df_map = load_data()
 
-# 9. Plotly 단계구분도 지도 생성 (타일 배경 없음)
-fig = px.choropleth_mapbox(
-    df_map,
-    geojson=geojson_data,
-    locations="sigungu_code",
-    featureidkey="properties.코드",
-    color="고령화율",
-    color_continuous_scale="Reds",
-    range_color=(0, df_map["고령화율"].max()),
-    mapbox_style="white-bg",
-    center={"lat": 35.9, "lon": 127
+# 9. Plotly 단계구분도 지도 생성
+fig = px.
